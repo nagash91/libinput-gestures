@@ -19,7 +19,11 @@ CONFDIRS = (USERDIR, '/etc')
 OBLIQUE_RATIO = math.tan(math.radians(22.5))
 
 # Minimum significant distance to move for swipes, in dots squared.
-ABZSQUARE = 70**2
+ABZSQUARE = 10000**2
+
+# Minimum significant distance to move for swipes, in dots squared, without releasing the touchpad.
+ABZSQUARE_TOUCHING_BASE = 10 ** 2
+ABZSQUARE_TOUCHING = ABZSQUARE_TOUCHING_BASE
 
 # Rotation threshold in degrees to discriminate pinch rotate from in/out
 ROTATE_ANGLE = 15.0
@@ -282,13 +286,39 @@ class SWIPE(GESTURE):
     SUPPORTED_MOTIONS = ('left', 'right', 'up', 'down',
             'left_up', 'right_up', 'left_down', 'right_down')
     extended_text = '_'
+    WAIT_END = False
 
     def update(self, coords):
+        if self.WAIT_END:
+            return
         'Update this gesture for a motion'
         self.data[0] += float(coords[2])
         self.data[1] += float(coords[3])
+        x, y = self.data
+        abx = abs(x)
+        aby = abs(y)
+
+        # Require absolute distance movement beyond a small thresh-hold.
+        if abx**2 + aby**2 > ABZSQUARE_TOUCHING_BASE:
+            if abx > aby:
+                motion = 'left' if x < 0 else 'right'
+                if self.has_extended and aby / abx > OBLIQUE_RATIO:
+                    motion += ('_up' if y < 0 else '_down')
+            else:
+                motion = 'up' if y < 0 else 'down'
+                if self.has_extended and abx / aby > OBLIQUE_RATIO:
+                    motion = ('left_' if x < 0 else 'right_') + motion
+            self.WAIT_END = True
+            self.data[0] = 0
+            self.data[1] = 0
+            self.action(motion)
+
 
     def end(self):
+        self.data[0] = 0
+        self.data[1] = 0
+        self.WAIT_END = False
+        return
         'Action this gesture at the end of a motion sequence'
         x, y = self.data
         abx = abs(x)
